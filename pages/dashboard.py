@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from services import prophet
+from services import prophet, random_forest_regressor
 from services.utils import read_dataset
 
 
@@ -21,7 +21,9 @@ def display():
         df_with_prophet = prophet.extract_prophet_data(
             pred, mmm_df, target_prophet_cols=["trend", "yearly"]
         )
-        # st.table(df_with_prophet)
+        rmse, r2_score = plot_random_forest_predict(df_with_prophet)
+        # print(rmse)
+        # print(r2_score)
 
 
 def plot_cost_and_revenue(
@@ -32,3 +34,16 @@ def plot_cost_and_revenue(
 ):
     st.line_chart(data=df, x=date_column, y=revenue_columns)
     st.line_chart(data=df, x=date_column, y=cost_columns)
+
+
+def plot_random_forest_predict(
+    df_with_prophet: pd.DataFrame, target_column="sales"
+) -> (float, float):
+    rf_model, pred = random_forest_regressor.regressor(
+        df_with_prophet, target_column, list(df_with_prophet.columns)[2:]
+    )
+
+    rmse, r2_score = random_forest_regressor.calc_rmse_r2(
+        df_with_prophet[target_column], pred
+    )
+    return rmse, r2_score
