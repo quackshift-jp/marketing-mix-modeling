@@ -43,7 +43,7 @@ def fit_predict_rf_model(
     x_train: pd.DataFrame,
     y_train: pd.DataFrame,
     x_test: pd.DataFrame,
-) -> np.ndarray:
+) -> (RandomForestRegressor, np.ndarray):
     rf_model.fit(x_train, y_train)
     pred = rf_model.predict(x_test)
     # Shapの計算に、RandomForestRegressorを用いるため、モデルをreturnする
