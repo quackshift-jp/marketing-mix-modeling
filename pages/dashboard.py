@@ -2,7 +2,12 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from services import prophet, random_forest_regressor, shap_feature_importance
+from services import (
+    draw_response_curve,
+    prophet,
+    random_forest_regressor,
+    shap_feature_importance,
+)
 from services.utils import read_dataset
 
 SALES_COLUMNS = ["tvcm", "newspaper", "web"]
@@ -34,7 +39,15 @@ def display():
         st.pyplot(shap_feature_importance.plot_roi(feature_importance))
         st.pyplot(shap_feature_importance.plot_spend_effect_share(feature_importance))
 
+        for feature in SALES_COLUMNS:
+            st.pyplot(
+                draw_response_curve.response_curve(shap_df, df_with_prophet, feature)
+            )
 
+        calc_mean_spend(df_with_prophet, SALES_COLUMNS)
+
+
+# TODO:下の関数は、servicesディレクトリに移動させたい
 def plot_cost_and_revenue(
     df: pd.DataFrame,
     date_column: str,
@@ -43,6 +56,13 @@ def plot_cost_and_revenue(
 ):
     st.line_chart(data=df, x=date_column, y=revenue_columns)
     st.line_chart(data=df, x=date_column, y=cost_columns)
+
+
+def calc_mean_spend(cost_df: pd.DataFrame, features: list[str]):
+    st.write("平均コスト")
+    for feature in features:
+        mean_spend = cost_df[feature].mean().astype("int")
+        st.write(f"{feature}:{mean_spend}/週")
 
 
 def random_forest_predict(
