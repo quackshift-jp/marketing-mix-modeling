@@ -1,9 +1,11 @@
-import numpy as np
+import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
+from sklearn.ensemble import RandomForestRegressor
 
 from services import (
     draw_response_curve,
+    future_predict,
     prophet,
     random_forest_regressor,
     shap_feature_importance,
@@ -11,7 +13,15 @@ from services import (
 from services.utils import read_dataset
 
 SALES_COLUMNS = ["tvcm", "newspaper", "web"]
-PROPHET_COLUMNS = SALES_COLUMNS + ["trend", "yearly"]
+PROPHET_COLUMNS = ["trend", "yearly"]
+FEATURE_COLUMNS = SALES_COLUMNS + PROPHET_COLUMNS
+
+
+OPTIMIZE_PARAMS = {
+    "tvcm": 1.25,
+    "web": 1.25,
+    "newspaper": 0.8,
+}
 
 
 def display():
@@ -31,7 +41,7 @@ def display():
         df_with_prophet = prophet.extract_prophet_data(
             pred, mmm_df, target_prophet_cols=["trend", "yearly"]
         )
-        shap_df = random_forest_predict(df_with_prophet, PROPHET_COLUMNS)
+        shap_df, rf_model = random_forest_predict(df_with_prophet, FEATURE_COLUMNS)
 
         feature_importance = shap_feature_importance.extract_spend_effect_share(
             shap_df, SALES_COLUMNS, df_with_prophet
@@ -45,6 +55,8 @@ def display():
             )
 
         calc_mean_spend(df_with_prophet, SALES_COLUMNS)
+
+        st.pyplot(future_prediction(prophet_model, mmm_df, FEATURE_COLUMNS, rf_model))
 
 
 # TODO:下の関数は、servicesディレクトリに移動させたい
@@ -67,7 +79,7 @@ def calc_mean_spend(cost_df: pd.DataFrame, features: list[str]):
 
 def random_forest_predict(
     df_with_prophet: pd.DataFrame, feature_columns: list[str], target_column="sales"
-) -> pd.DataFrame:
+) -> (pd.DataFrame, RandomForestRegressor):
     rf_model, pred = random_forest_regressor.regressor(
         df_with_prophet, target_column, list(df_with_prophet.columns)[2:]
     )
@@ -81,4 +93,20 @@ def random_forest_predict(
     )
 
     st.write(f"予測精度(r2_score):{r2_score}")
-    return pd.DataFrame(shap_values, columns=feature_columns)
+    return pd.DataFrame(shap_values, columns=feature_columns), rf_model
+
+
+def future_prediction(prophet_model, mmm_df, features, rf_model) -> plt.figure:
+    forecast = future_predict.get_prophet_forecast(prophet_model)
+
+    current_df = future_predict.get_current_df_with_future_prophet(
+        forecast[PROPHET_COLUMNS], mmm_df, 30
+    )
+    optimized_df = future_predict.get_optimized_df_with_prophet(
+        forecast[PROPHET_COLUMNS], mmm_df, 30, OPTIMIZE_PARAMS
+    )
+
+    current_pred_df = future_predict.predict(current_df, features, rf_model)
+    optimized_pred_df = future_predict.predict(optimized_df, features, rf_model)
+
+    return future_predict.plot_prediction(current_pred_df, optimized_pred_df)
