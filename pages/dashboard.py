@@ -5,6 +5,7 @@ import pandas as pd
 import streamlit as st
 from sklearn.ensemble import RandomForestRegressor
 
+from pages import optimization
 from services import (
     draw_response_curve,
     future_predict,
@@ -19,13 +20,6 @@ PROPHET_COLUMNS = ["trend", "yearly"]
 FEATURE_COLUMNS = SALES_COLUMNS + PROPHET_COLUMNS
 
 
-OPTIMIZE_PARAMS = {
-    "tvcm": 1.25,
-    "web": 1.25,
-    "newspaper": 0.8,
-}
-
-
 def display(upload_file):
     try:
         mmm_df = read_dataset.read_data(upload_file, "Date")
@@ -34,8 +28,6 @@ def display(upload_file):
 
     revenue_columns = st.selectbox("売上カラムを選択してください", mmm_df.columns)
     cost_columns = st.multiselect("説明変数を選択してください（複数選択可）", mmm_df.columns)
-    print(type(revenue_columns))
-    print(type(cost_columns))
 
     st.subheader("売上とコストの可視化", divider="rainbow")
     st.line_chart(data=mmm_df, x="date", y=revenue_columns)
@@ -58,21 +50,14 @@ def display(upload_file):
         st.pyplot(shap_feature_importance.plot_roi(feature_importance))
         st.pyplot(shap_feature_importance.plot_spend_effect_share(feature_importance))
 
-        for feature in SALES_COLUMNS:
-            st.pyplot(
-                draw_response_curve.response_curve(shap_df, df_with_prophet, feature)
-            )
-
-        show_mean_spend(df_with_prophet, SALES_COLUMNS)
-
-        st.pyplot(future_prediction(prophet_model, mmm_df, FEATURE_COLUMNS, rf_model))
-
-
-def show_mean_spend(cost_df: pd.DataFrame, features: list[str]):
-    st.markdown("#### 平均コスト/週")
-    for feature in features:
-        mean_spend = cost_df[feature].mean().astype("int")
-        st.write(f"{feature}:{mean_spend}")
+        optimization.optimize(
+            cost_columns,
+            shap_df,
+            df_with_prophet,
+            prophet_model,
+            rf_model,
+            mmm_df,
+        )
 
 
 def random_forest_predict(
@@ -93,22 +78,6 @@ def random_forest_predict(
     st.markdown("#### 予測精度(r2_score)")
     st.write(r2_score)
     return pd.DataFrame(shap_values, columns=feature_columns), rf_model
-
-
-def future_prediction(prophet_model, mmm_df, features, rf_model) -> plt.figure:
-    forecast = future_predict.get_prophet_forecast(prophet_model)
-
-    current_df = future_predict.get_current_df_with_future_prophet(
-        forecast[PROPHET_COLUMNS], mmm_df, 30
-    )
-    optimized_df = future_predict.get_optimized_df_with_prophet(
-        forecast[PROPHET_COLUMNS], mmm_df, 30, OPTIMIZE_PARAMS
-    )
-
-    current_pred_df = future_predict.predict(current_df, features, rf_model)
-    optimized_pred_df = future_predict.predict(optimized_df, features, rf_model)
-
-    return future_predict.plot_prediction(current_pred_df, optimized_pred_df)
 
 
 def show_progress_bar() -> None:
