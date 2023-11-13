@@ -1,3 +1,5 @@
+import time
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
@@ -24,24 +26,31 @@ OPTIMIZE_PARAMS = {
 }
 
 
-def display():
-    st.header("Upload Dataset")
+def display(upload_file):
+    try:
+        mmm_df = read_dataset.read_data(upload_file, "Date")
+    except ValueError:
+        st.error("データの日付は「Dateまたはdate」、売上は「Salesまたはsales」にしてください。")
 
-    upload_file = st.file_uploader("Choose a CSV file", type=["csv"])
-    if upload_file:
-        try:
-            mmm_df = read_dataset.read_data(upload_file, "Date")
-            st.subheader("売上とコストの可視化", divider="rainbow")
-            plot_cost_and_revenue(mmm_df, "date", ["sales"], mmm_df.columns[2:])
-        except ValueError:
-            st.error("データの日付は「Dateまたはdate」、売上は「Salesまたはsales」にしてください。")
+    revenue_columns = st.selectbox("売上カラムを選択してください", mmm_df.columns)
+    cost_columns = st.multiselect("説明変数を選択してください（複数選択可）", mmm_df.columns)
+    print(type(revenue_columns))
+    print(type(cost_columns))
 
-        st.subheader("コストに対する売上貢献度を見る", divider="rainbow")
+    st.subheader("売上とコストの可視化", divider="rainbow")
+    st.line_chart(data=mmm_df, x="date", y=revenue_columns)
+    st.line_chart(data=mmm_df, x="date", y=cost_columns)
+
+    execute_ramdom_forest = st.button("ランダムフォレストで予測する", key=1)
+    if execute_ramdom_forest:
+        show_progress_bar()
         pred, prophet_model = prophet.fit_predict_prophet_model(mmm_df)
         df_with_prophet = prophet.extract_prophet_data(
             pred, mmm_df, target_prophet_cols=["trend", "yearly"]
         )
         shap_df, rf_model = random_forest_predict(df_with_prophet, FEATURE_COLUMNS)
+
+        st.subheader("各チャネルの売上貢献度を見る", divider="rainbow")
 
         feature_importance = shap_feature_importance.extract_spend_effect_share(
             shap_df, SALES_COLUMNS, df_with_prophet
@@ -54,27 +63,16 @@ def display():
                 draw_response_curve.response_curve(shap_df, df_with_prophet, feature)
             )
 
-        calc_mean_spend(df_with_prophet, SALES_COLUMNS)
+        show_mean_spend(df_with_prophet, SALES_COLUMNS)
 
         st.pyplot(future_prediction(prophet_model, mmm_df, FEATURE_COLUMNS, rf_model))
 
 
-# TODO:下の関数は、servicesディレクトリに移動させたい
-def plot_cost_and_revenue(
-    df: pd.DataFrame,
-    date_column: str,
-    revenue_columns: list[str],
-    cost_columns: list[str],
-):
-    st.line_chart(data=df, x=date_column, y=revenue_columns)
-    st.line_chart(data=df, x=date_column, y=cost_columns)
-
-
-def calc_mean_spend(cost_df: pd.DataFrame, features: list[str]):
-    st.write("平均コスト")
+def show_mean_spend(cost_df: pd.DataFrame, features: list[str]):
+    st.markdown("#### 平均コスト/週")
     for feature in features:
         mean_spend = cost_df[feature].mean().astype("int")
-        st.write(f"{feature}:{mean_spend}/週")
+        st.write(f"{feature}:{mean_spend}")
 
 
 def random_forest_predict(
@@ -92,7 +90,8 @@ def random_forest_predict(
         rf_model, df_with_prophet[feature_columns]
     )
 
-    st.write(f"予測精度(r2_score):{r2_score}")
+    st.markdown("#### 予測精度(r2_score)")
+    st.write(r2_score)
     return pd.DataFrame(shap_values, columns=feature_columns), rf_model
 
 
@@ -110,3 +109,12 @@ def future_prediction(prophet_model, mmm_df, features, rf_model) -> plt.figure:
     optimized_pred_df = future_predict.predict(optimized_df, features, rf_model)
 
     return future_predict.plot_prediction(current_pred_df, optimized_pred_df)
+
+
+def show_progress_bar() -> None:
+    my_bar = st.progress(0)
+    st.write("In Progress...")
+    for parcent in range(100):
+        time.sleep(0.01)
+        my_bar.progress(parcent + 1)
+    st.write("Complete🎉")
